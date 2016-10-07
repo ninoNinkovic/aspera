@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
         curl \
         zlib1g-dev \
         libncurses5-dev \
-        git \
+        git
 
 ADD http://download.asperasoft.com/download/sw/ascp-client/3.5.4/ascp-install-3.5.4.102989-linux-64.sh /opt/
 
