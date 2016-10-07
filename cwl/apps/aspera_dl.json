@@ -1,0 +1,108 @@
+{
+  "sbg:id": "aspera",
+  "id": "#aspera",
+  "inputs": [
+    {
+      "type": ["null", "string"],
+      "label": "SCP_Filepass",
+      "description": "SCP_Filepass",
+      "streamable": false,
+      "default": "",
+      "id": "#SCP_Filepass",
+      "inputBinding": {
+        "position": 1,
+        "separate": true,
+        "sbg:cmdInclude": true
+      },
+      "required": false
+    },
+    {
+      "type": ["null", "string"],
+      "label": "share_site_details",
+      "description": "share_site_details",
+      "streamable": false,
+      "default": "",
+      "id": "#share_site_details",
+      "required": false
+    }
+  ],
+  "outputs": [
+    {
+      "type": [
+        "null",
+        {
+          "items": "File",
+          "type": "array"
+        }
+      ],
+      "label": "downloaded_files",
+      "description": "vcf",
+      "streamable": false,
+      "default": "",
+      "id": "#downloaded_files",
+      "outputBinding": {
+        "glob": {
+          "engine": "#cwl-js-engine",
+          "script": "downloads/*",
+          "class": "Expression"
+        },
+        "sbg:inheritMetadataFrom": "#bam",
+        "sbg:metadata": {
+          "from_tool": "aspera_dl"
+        }
+      }
+    },
+    {
+      "type": ["null", "File"],
+      "label": "std_out",
+      "description": "standard output",
+      "streamable": false,
+      "default": "",
+      "id": "#std_out",
+      "outputBinding": {
+        "glob": "\"std.out\"",
+        "sbg:metadata": {
+          "from_tool": "aspera_dl"
+        }
+      }
+    }
+  ],
+  "requirements": [],
+  "hints": [
+    {
+      "class": "DockerRequirement",
+      "dockerPull": "cgrlab/aspera:latest"
+    },
+    {
+      "class": "sbg:CPURequirement",
+      "value": 1
+    },
+    {
+      "class": "sbg:MemRequirement",
+      "value": 1000
+    }
+  ],
+  "label": "aspera",
+  "class": "CommandLineTool",
+  "baseCommand": [
+    "mkdir downloads && export ASPERA_SCP_FILEPASS="
+  ],
+  "arguments": [
+    {
+      "position": 2,
+      "prefix": "&& sh shares_download.sh ./downloads",
+      "separate": true,
+      "valueFrom": "$job.inputs.share_site_details"
+    },
+    {
+      "position": 201,
+      "separate": true,
+      "valueFrom": {
+        "engine": "#cwl-js-engine",
+        "script": "\"&& ls -lR\"",
+        "class": "Expression"
+      }
+    }
+  ],
+  "stdout": "std.out"
+}

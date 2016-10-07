@@ -1,0 +1,130 @@
+## Aspera Download {.tabset}
+
+```{r include = FALSE}
+require(tidyverse); require(rmarkdown); require(knitr); require(sevenbridges); 
+
+options(max.print = "99"); opts_knit$set(width = 99)
+opts_chunk$set(cache=FALSE, tidy=FALSE)
+
+source("~/sbg_auth.R")
+
+```
+
+From Broad
+
+http://archive.broadinstitute.org/aspera/doc/aspera_shares_transfers.txt
+
+
+
+### base command
+
+```{sh base command, eval=FALSE}
+
+#Example 1  Downloading an entire share
+
+mkdir downloads && \
+export ASPERA_SCP_FILEPASS=[Secret Pass] && \
+sh shares_download.sh ./downloads https://shares.broadinstitute.org [account number]:[password] SN0101262/
+
+#Example 2 Manifest Download / specific file download
+
+mkdir downloads && \
+export ASPERA_SCP_FILEPASS=[Secret Pass] && \
+sh shares_download.sh ./downloads https://shares.broadinstitute.org [account number]:[password] SN0101262/Manifest.txt.aspera-env
+
+
+
+```
+
+### i/o {.tabset}
+
+#### inputs 
+
+```{r inputs}
+
+inputs = list(
+  
+input(id = "SCP_Filepass", label = "SCP_Filepass", description = "SCP_Filepass", type = "string", position = 1),
+  
+  
+input(id = "share_site_details", label = "share_site_details", description = "share_site_details", type = "string")
+  
+)
+
+```
+
+#### arguments
+
+```{r arguments}
+arguments = CCBList(
+  
+CommandLineBinding(position = 2, prefix = "&& sh shares_download.sh ./downloads", valueFrom = '$job.inputs.share_site_details'),
+
+CommandLineBinding(position = 201, valueFrom = list('"&& ls -lR"'))
+
+)
+```
+
+#### outputs
+
+```{r output}
+
+outputs = list(
+  
+output(id = "downloaded_files", label = "downloaded_files", 
+description = "vcf", type = "File...",
+inheritMetadataFrom = "#bam", metadata = list(from_tool = "aspera_dl"),
+glob = Expression(engine = "#cwl-js-engine",
+script = 'downloads/*')),
+
+output(id = "std_out", label = "std_out", 
+description = "standard output", type = "File",
+metadata = list(from_tool = "aspera_dl"),
+glob = '"std.out"')
+  
+)
+
+
+```
+
+### portability {.tabset}
+
+####docker
+
+``` cgrlab/aspera:latest ```
+
+https://hub.docker.com/r/cgrlab/aspera/
+
+####tool definition
+
+```{r 5 create tool object}
+
+tool <- Tool(
+id = "aspera", 
+label = "aspera",
+hints = requirements(docker(pull = "cgrlab/aspera:latest"), cpu(1), mem(1000)),
+
+baseCommand = "mkdir downloads && export ASPERA_SCP_FILEPASS=",
+
+stdout = "std.out",
+
+inputs = inputs,
+  
+arguments = arguments,
+  
+outputs = outputs)
+
+```
+
+####cwl file
+
+```{r eval=create_cwl=="yes"}
+write(tool$toJSON(pretty = TRUE), "../apps/aspera_dl.json")
+```
+
+####push app to cloud platform
+
+```{r eval=platform_push=="yes"}
+project$app_add("aspera_dl", tool)
+```
+
