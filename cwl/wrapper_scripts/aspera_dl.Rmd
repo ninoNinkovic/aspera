@@ -6,15 +6,13 @@ require(tidyverse); require(rmarkdown); require(knitr); require(sevenbridges);
 options(max.print = "99"); opts_knit$set(width = 99)
 opts_chunk$set(cache=FALSE, tidy=FALSE)
 
-source("~/sbg_auth.R")
+source("../../sbg_auth.R")
 
 ```
 
 From Broad
 
 http://archive.broadinstitute.org/aspera/doc/aspera_shares_transfers.txt
-
-
 
 ### base command
 
@@ -32,8 +30,6 @@ mkdir downloads && \
 export ASPERA_SCP_FILEPASS=[Secret Pass] && \
 sh shares_download.sh ./downloads https://shares.broadinstitute.org [account number]:[password] SN0101262/Manifest.txt.aspera-env
 
-
-
 ```
 
 ### i/o {.tabset}
@@ -44,10 +40,13 @@ sh shares_download.sh ./downloads https://shares.broadinstitute.org [account num
 
 inputs = list(
   
-input(id = "SCP_Filepass", label = "SCP_Filepass", description = "SCP_Filepass", type = "string", position = 1),
+input(id = "SCP_Filepass", label = "SCP_Filepass", description = "SCP_Filepass", type = "string", separate = FALSE, prefix = "ASPERA_SCP_FILEPASS=", position = 1),
   
+
+input(id = "metadata_file", label = "metadata_file", description = "metadta file the inlcudes checksum", type = "File", valueFrom = Expression(engine = "#cwl-js-engine", script = '$job.inputs.share_site_detail'))
+
   
-input(id = "share_site_details", label = "share_site_details", description = "share_site_details", type = "string")
+#https://shares.broadinstitute.org SN0101262:A5J4SJBTNIIFH6F SN0101262/GPK4024_0401.bam.aspera-env
   
 )
 
@@ -58,10 +57,8 @@ input(id = "share_site_details", label = "share_site_details", description = "sh
 ```{r arguments}
 arguments = CCBList(
   
-CommandLineBinding(position = 2, prefix = "&& sh shares_download.sh ./downloads", valueFrom = '$job.inputs.share_site_details'),
-
-CommandLineBinding(position = 201, valueFrom = list('"&& ls -lR"'))
-
+CommandLineBinding(position = 2, prefix = "&& sh shares_download.sh ./", valueFrom = Expression(engine = "#cwl-js-engine", script = '$job.inputs.share_site_details'))
+  
 )
 ```
 
@@ -71,12 +68,18 @@ CommandLineBinding(position = 201, valueFrom = list('"&& ls -lR"'))
 
 outputs = list(
   
-output(id = "downloaded_files", label = "downloaded_files", 
-description = "vcf", type = "File...",
-inheritMetadataFrom = "#bam", metadata = list(from_tool = "aspera_dl"),
+output(id = "downloaded_file", label = "downloaded_files", 
+description = "downloaded_file", type = "File",
+metadata = list(from_tool = "aspera_dl"),
 glob = Expression(engine = "#cwl-js-engine",
-script = 'downloads/*')),
+script = '"*.bam"')),
 
+output(id = "aspx", label = "aspx", 
+description = "aspx", type = "File",
+metadata = list(from_tool = "aspera_dl"),
+glob = Expression(engine = "#cwl-js-engine",
+script = '"*.aspx"')),  
+  
 output(id = "std_out", label = "std_out", 
 description = "standard output", type = "File",
 metadata = list(from_tool = "aspera_dl"),
@@ -84,6 +87,11 @@ glob = '"std.out"')
   
 )
 
+```
+
+```{r add on scripts}
+
+shares_download_sh = fileDef(name = "shares_download.sh", content = read_file("shares_download.sh"))
 
 ```
 
@@ -103,8 +111,9 @@ tool <- Tool(
 id = "aspera", 
 label = "aspera",
 hints = requirements(docker(pull = "cgrlab/aspera:latest"), cpu(1), mem(1000)),
-
-baseCommand = "mkdir downloads && export ASPERA_SCP_FILEPASS=",
+requirements = requirements(shares_download_sh),
+  
+baseCommand = "mkdir downloads && export",
 
 stdout = "std.out",
 
@@ -126,5 +135,31 @@ write(tool$toJSON(pretty = TRUE), "../apps/aspera_dl.json")
 
 ```{r eval=platform_push=="yes"}
 project$app_add("aspera_dl", tool)
+```
+
+
+#### manifest splitter
+
+```{r eval=FALSE}
+
+require(tidyverse); require(sevenbridges);
+
+manifest = read_tsv("../../_1_Manifest.txt", col_names=c("filename","md5sum")) %>% 
+slice(1) %>% 
+group_by(.) %>% 
+do({
+write_tsv(., paste0("../../metafiles/", .$filename, ".metafile"))
+project$upload(paste0("../../metafiles/", .$filename, ".metafile"), metadata=list(
+sample_id = .$filename, 
+experimental_strategy = "WGS",
+platform = "Illumina HiSeq X10",
+coverage = "30",
+quality_scale = "illumina18",
+platform_unit_id = .$md5sum), overwrite=TRUE)
+return(.)
+})
+
+
+
 ```
 

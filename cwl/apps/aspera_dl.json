@@ -11,42 +11,64 @@
       "id": "#SCP_Filepass",
       "inputBinding": {
         "position": 1,
-        "separate": true,
+        "prefix": "ASPERA_SCP_FILEPASS=",
+        "separate": false,
         "sbg:cmdInclude": true
       },
       "required": false
     },
     {
-      "type": ["null", "string"],
-      "label": "share_site_details",
-      "description": "share_site_details",
+      "type": ["null", "File"],
+      "label": "metadata_file",
+      "description": "metadta file the inlcudes checksum",
       "streamable": false,
       "default": "",
-      "id": "#share_site_details",
+      "id": "#metadata_file",
+      "inputBinding": {
+        "position": 0,
+        "separate": true,
+        "valueFrom": {
+          "engine": "#cwl-js-engine",
+          "script": "$job.inputs.share_site_detail",
+          "class": "Expression"
+        },
+        "sbg:cmdInclude": true
+      },
       "required": false
     }
   ],
   "outputs": [
     {
-      "type": [
-        "null",
-        {
-          "items": "File",
-          "type": "array"
-        }
-      ],
+      "type": ["null", "File"],
       "label": "downloaded_files",
-      "description": "vcf",
+      "description": "downloaded_file",
       "streamable": false,
       "default": "",
-      "id": "#downloaded_files",
+      "id": "#downloaded_file",
       "outputBinding": {
         "glob": {
           "engine": "#cwl-js-engine",
-          "script": "downloads/*",
+          "script": "\"*.bam\"",
           "class": "Expression"
         },
-        "sbg:inheritMetadataFrom": "#bam",
+        "sbg:metadata": {
+          "from_tool": "aspera_dl"
+        }
+      }
+    },
+    {
+      "type": ["null", "File"],
+      "label": "aspx",
+      "description": "aspx",
+      "streamable": false,
+      "default": "",
+      "id": "#aspx",
+      "outputBinding": {
+        "glob": {
+          "engine": "#cwl-js-engine",
+          "script": "\"*.aspx\"",
+          "class": "Expression"
+        },
         "sbg:metadata": {
           "from_tool": "aspera_dl"
         }
@@ -67,7 +89,17 @@
       }
     }
   ],
-  "requirements": [],
+  "requirements": [
+    {
+      "class": "CreateFileRequirement",
+      "fileDef": [
+        {
+          "filename": "shares_download.sh",
+          "fileContent": "#!/bin/bash\n\n#\n# ascp download from shares\n#\n# Broad Institute, BITS\n#\n# Fragment borrowed from ascp-shares.sh Authored by Aspera\n#\n\nDBG=true\nDBG=false\n\n#\n# Internals\n#\n\n_usage() {\n  echo \" To decrypt files, please set the  ASPERA_SCP_FILEPASS environemnt variable.\"\n  echo\n  echo \"  Usage: $0 LOCAL_TARGET SHARES_URL USER:PASSWORD /SHARES/PATH/TO/SOURCE/FILE\"\n  echo\n  echo \"  Example: ascp-shares-down.sh /home/user/me/my_aspera_downloads https://shares.broadinstitute.org SN0000000:ABCD1234efgh /SN00000000/foo.bar\"\n  echo\n  exit 1\n}\n\n_prep() {\n  case \"`uname`\" in\nDarwin*)\n  MKTEMP=\"mktemp -t tmp\" ;;\n*)\n  MKTEMP=mktemp\n  esac\n}\n  \n_get_response_from_json() {\n  JSON=\\{\\\"transfer_requests\\\":\\[\\{\\\"transfer_request\\\":\\{\\\"paths\\\":\\[\\{\\\"source\\\":\\\"$SHARES_SOURCE\\\"\\}\\]\\}\\}\\]\\}\n  JSONFILE=`$MKTEMP`\n  echo $JSON > $JSONFILE\n  \n  if ($DBG) \n  then\n    echo \"--------------------------\"\n    echo\n    echo JSON:\n    echo\n    echo `cat $JSONFILE`\n    echo\n  fi\n  \n  RESPONSE=`curl -ki -sS -H \"Accept: application/json\" -H \"Content-type: application/json\" -u $USERPASS -X POST -d @$JSONFILE $URL_DOWNLOAD_SETUP`\n  rm $JSONFILE\n\n  if ($DBG)\n  then\n    echo \"--------------------------\"\n    echo\n    echo RESPONSE: \n    echo\n    echo \"$RESPONSE\"\n    echo\n  fi\n\n}\n\n_download_setup() {\n_get_response_from_json\n\n\n  TOKEN=`echo $RESPONSE | sed 's/\\\\\\\\\\//\\//g' | sed 's/[{}]//g' | awk -v k=\"text\" '{n=split($0,a,\",\"); for (i=1; i<=n; i++) print a[i]}'   | sed 's/\\\"//g' | grep -w token | cut -d: -f2`\n  SOURCE=`echo $RESPONSE | sed 's/\\\\\\\\\\//\\//g' | sed 's/[{}]//g' | awk -v k=\"text\" '{n=split($0,a,\",\"); for (i=1; i<=n; i++) print a[i]}'   | sed 's/\\\"//g' | grep -w source | cut -d: -f8 | sed 's/\\]//g'`\n  USER=`echo $RESPONSE | sed 's/\\\\\\\\\\//\\//g' | sed 's/[{}]//g' | awk -v k=\"text\" '{n=split($0,a,\",\"); for (i=1; i<=n; i++) print a[i]}'   | sed 's/\\\"//g' | grep -w remote_user | cut -d: -f2`\n  HOST=`echo $RESPONSE | sed 's/\\\\\\\\\\//\\//g' | sed 's/[{}]//g' | awk -v k=\"text\" '{n=split($0,a,\",\"); for (i=1; i<=n; i++) print a[i]}'   | sed 's/\\\"//g' | grep -w remote_host | cut -d: -f2`\n\n  if ($DBG)\n  then\n    echo \"--------------------------\"\n    echo\n    echo VALUES FROM RESPONSE: \n    echo TOKEN: $TOKEN\n    echo SOURCE: $SOURCE\n    echo USER: $USER\n    echo HOST: $HOST\n    echo\n  fi\n\n\n}\n\n_temp_key_make() {\n  KEY=`$MKTEMP`\n    echo \"-----BEGIN DSA PRIVATE KEY-----\nMIIBuwIBAAKBgQDkKQHD6m4yIxgjsey6Pny46acZXERsJHy54p/BqXIyYkVOAkEp\nKgvT3qTTNmykWWw4ovOP1+Di1c/2FpYcllcTphkWcS8lA7j012mUEecXavXjPPG0\ni3t5vtB8xLy33kQ3e9v9/Lwh0xcRfua0d5UfFwopBIAXvJAr3B6raps8+QIVALws\nyeqsx3EolCaCVXJf+61ceJppAoGAPoPtEP4yzHG2XtcxCfXab4u9zE6wPz4ePJt0\nUTn3fUvnQmJT7i0KVCRr3g2H2OZMWF12y0jUq8QBuZ2so3CHee7W1VmAdbN7Fxc+\ncyV9nE6zURqAaPyt2bE+rgM1pP6LQUYxgD3xKdv1ZG+kDIDEf6U3onjcKbmA6ckx\nT6GavoACgYEAobapDv5p2foH+cG5K07sIFD9r0RD7uKJnlqjYAXzFc8U76wXKgu6\nWXup2ac0Co+RnZp7Hsa9G+E+iJ6poI9pOR08XTdPly4yDULNST4PwlfrbSFT9FVh\nzkWfpOvAUc8fkQAhZqv/PE6VhFQ8w03Z8GpqXx7b3NvBR+EfIx368KoCFEyfl0vH\nTa7g6mGwIMXrdTQQ8fZs\n-----END DSA PRIVATE KEY-----\n\" > $KEY\n    }\n\n_download() {\n  \n_temp_key_make\n\nif [ -z ${ASPERA_SCP_FILEPASS}\"\" ]; then\n  echo \"No ASPERA_SCP_FILEPASS environment variable found. Downloading without decryption\"\n  CMD=\"ascp --ignore-host-key -k 1 -Ql100m -d -i $KEY -W $TOKEN -P 33001 $USER@$HOST:$SOURCE $TARGET\"\nelse\n  echo \"ASPERA_SCP_FILEPASS environment variable found. Decrypting and downloading\"\n  CMD=\"ascp --ignore-host-key -k 1 -Ql100m -d --file-crypt=decrypt -i $KEY -W $TOKEN -P 33001 $USER@$HOST:$SOURCE $TARGET\"\nfi\n\nif($DBG)\n  then\n    echo $CMD\n  fi\n\n  eval $CMD\n  rm $KEY\n}\n\n#\n# Main program\n#\n\nif test $# -lt 4; then\n  _usage\nfi\n\nTARGET=$1\nURL_DOWNLOAD_SETUP=$2/node_api/files/download_setup\nUSERPASS=$3\nSHARES_SOURCE=$4\n\n\n_prep\n_download_setup\n_download\n"
+        }
+      ]
+    }
+  ],
   "hints": [
     {
       "class": "DockerRequirement",
@@ -85,21 +117,16 @@
   "label": "aspera",
   "class": "CommandLineTool",
   "baseCommand": [
-    "mkdir downloads && export ASPERA_SCP_FILEPASS="
+    "mkdir downloads && export"
   ],
   "arguments": [
     {
       "position": 2,
-      "prefix": "&& sh shares_download.sh ./downloads",
-      "separate": true,
-      "valueFrom": "$job.inputs.share_site_details"
-    },
-    {
-      "position": 201,
+      "prefix": "&& sh shares_download.sh ./",
       "separate": true,
       "valueFrom": {
         "engine": "#cwl-js-engine",
-        "script": "\"&& ls -lR\"",
+        "script": "$job.inputs.share_site_details",
         "class": "Expression"
       }
     }
